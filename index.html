@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>OS Camera Hand Quiz + Music</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+  <style>
+    :root{
+      color-scheme:dark;
+      --bg:#0a0f1e;--panel:#121a2d;--panel2:#19243c;--text:#f6f8ff;
+      --muted:#aeb8cf;--accent:#72a7ff;--good:#54dd91;--bad:#ff6b7a;
+      --border:#2b3c60;--yellow:#ffd166;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;min-height:100vh;
+      background:
+        radial-gradient(circle at 15% 10%,rgba(114,167,255,.16),transparent 30%),
+        radial-gradient(circle at 90% 90%,rgba(84,221,145,.10),transparent 30%),
+        var(--bg);
+      color:var(--text);
+      font-family:system-ui,-apple-system,"Segoe UI","Noto Sans Thai",sans-serif;
+      padding:18px;
+    }
+    .app{width:min(1140px,100%);margin:auto}
+    .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+    .brand{font-weight:900;font-size:20px}
+    .chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .chip{
+      padding:9px 12px;border-radius:999px;background:var(--panel);
+      border:1px solid var(--border);font-weight:800;font-size:14px
+    }
+    .layout{display:grid;grid-template-columns:minmax(0,1fr) 315px;gap:14px}
+    .board{
+      position:relative;background:rgba(18,26,45,.94);border:1px solid var(--border);
+      border-radius:24px;padding:clamp(18px,3vw,30px);min-height:620px;overflow:hidden
+    }
+    .side{
+      background:rgba(18,26,45,.94);border:1px solid var(--border);
+      border-radius:24px;padding:14px;align-self:start
+    }
+    video{
+      width:100%;aspect-ratio:4/3;object-fit:cover;background:#05070d;border-radius:16px;
+      transform:scaleX(-1);border:1px solid #3c4e75
+    }
+    .side h3{margin:12px 0 6px;font-size:16px}
+    .side p{margin:0;color:var(--muted);font-size:14px;line-height:1.6}
+    .gesture,.musicbox{
+      margin-top:12px;padding:12px;border-radius:14px;background:#0b1222;border:1px solid #2c3c5d
+    }
+    .gesture{font-weight:900;text-align:center}
+    .musicbox{font-size:13px;line-height:1.45}
+    .musicbox b{display:block;margin-bottom:4px;color:var(--yellow)}
+    .progress{height:9px;border-radius:99px;background:#09101f;overflow:hidden;margin-bottom:20px}
+    .progress>div{height:100%;width:0;background:linear-gradient(90deg,#72a7ff,#a082ff);transition:.25s}
+    .qnum{color:var(--muted);font-weight:800;font-size:14px;margin-bottom:6px}
+    h1{font-size:clamp(23px,3.1vw,36px);line-height:1.35;margin:0 0 8px}
+    .hint{margin:0 0 18px;color:var(--muted)}
+    .answers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .answer{
+      min-height:80px;border:1px solid #3a4d74;border-radius:17px;background:var(--panel2);
+      display:flex;align-items:center;justify-content:center;text-align:center;padding:14px;
+      font-size:17px;font-weight:900;user-select:none;transition:.12s
+    }
+    .answer.hovered,.handbutton.hovered{
+      border-color:#89b4ff!important;
+      box-shadow:0 0 0 4px rgba(114,167,255,.18),0 0 26px rgba(114,167,255,.20)
+    }
+    .answer.grabbed{opacity:.32}
+    .answer.disabled{opacity:.3}
+    .drop{
+      min-height:120px;margin-top:20px;border:2px dashed #5a75a6;border-radius:20px;
+      display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;background:#0b1221;
+      transition:.15s
+    }
+    .drop.hovered{border-color:#8bb6ff;background:rgba(114,167,255,.12)}
+    .drop.good{border-color:var(--good);background:rgba(84,221,145,.1)}
+    .drop.bad{border-color:var(--bad);background:rgba(255,107,122,.1)}
+    .drop b{font-size:20px}
+    .drop small{display:block;color:var(--muted);margin-top:5px}
+    .msg{min-height:60px;padding-top:14px;text-align:center;font-weight:800;line-height:1.5}
+    .msg.good{color:var(--good)} .msg.bad{color:var(--bad)}
+    .actions{text-align:center;margin-top:8px}
+    button{
+      border:1px solid transparent;border-radius:14px;padding:12px 18px;font-size:16px;font-weight:900;
+      background:var(--accent);color:#08101e;cursor:pointer;min-height:48px
+    }
+    button.secondary{background:#273754;color:white;border-color:#40547e}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    .next{
+      min-width:min(360px,90%);font-size:18px;padding:14px 22px;
+      transition:.12s
+    }
+    .next.ready{animation:pulse 1.2s ease-in-out infinite}
+    @keyframes pulse{50%{transform:scale(1.025)}}
+    .screen{text-align:center;padding:40px 10px}
+    .screen .icon{font-size:70px}
+    .screen h2{font-size:clamp(28px,5vw,48px);margin:8px 0}
+    .screen p{max-width:680px;margin:0 auto 22px;color:var(--muted);line-height:1.7}
+    .hidden{display:none!important}
+    .handcursor{
+      position:absolute;width:34px;height:34px;border:3px solid white;border-radius:50%;
+      transform:translate(-50%,-50%);pointer-events:none;z-index:30;
+      box-shadow:0 0 0 6px rgba(114,167,255,.18);
+      transition:width .08s,height .08s,border-color .08s
+    }
+    .handcursor.pinching{
+      width:25px;height:25px;border-color:#54dd91;box-shadow:0 0 0 8px rgba(84,221,145,.2)
+    }
+    .floating{
+      position:absolute;z-index:20;pointer-events:none;transform:translate(-50%,-50%);
+      min-width:170px;max-width:300px;padding:13px 15px;border-radius:15px;
+      background:#243658;border:1px solid #86adf1;font-weight:900;text-align:center;
+      box-shadow:0 16px 38px rgba(0,0,0,.38)
+    }
+    .scorebig{font-size:58px;font-weight:900;color:var(--yellow)}
+    .handtip{
+      margin-top:8px;color:#d8e5ff;font-size:13px;font-weight:700
+    }
+    @media(max-width:900px){
+      .layout{grid-template-columns:1fr}
+      .side{order:-1}.side-inner{display:grid;grid-template-columns:minmax(180px,280px) 1fr;gap:14px;align-items:center}
+      .side h3{margin-top:0}
+    }
+    @media(max-width:620px){
+      body{padding:10px}.answers{grid-template-columns:1fr}.board,.side{border-radius:18px}.side-inner{grid-template-columns:1fr}
+    }
+    @media(prefers-reduced-motion:reduce){.next.ready{animation:none}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="brand">📷 OS Camera Hand Quiz</div>
+    <div class="chips">
+      <div class="chip">คะแนน <span id="score">0</span>/10</div>
+      <div class="chip">ข้อ <span id="count">0</span>/10</div>
+      <button id="musicBtn" class="secondary handbutton" type="button" data-hand-click="1">🎵 เพลง: เปิด</button>
+      <button id="trackBtn" class="secondary handbutton" type="button" data-hand-click="1">⏭ เปลี่ยนเพลง</button>
+      <button id="soundBtn" class="secondary handbutton" type="button" data-hand-click="1">🔊 SFX: เปิด</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <main id="board" class="board">
+      <div id="cursor" class="handcursor hidden"></div>
+      <div id="floating" class="floating hidden"></div>
+
+      <section id="startScreen" class="screen">
+        <div class="icon">🖐️🎵</div>
+        <h2>ตอบคำถามด้วยมือผ่านกล้อง</h2>
+        <p>
+          นิ้วชี้เป็นเคอร์เซอร์ • จีบโป้ง+ชี้เพื่อหยิบ • คลายเพื่อวาง<br>
+          หลังตอบแล้ว ชี้ไปที่ปุ่ม “ข้อต่อไป” และจีบอีกครั้งเพื่อกด โดยไม่ต้องใช้เมาส์
+        </p>
+        <button id="startBtn" type="button">เปิดกล้อง + เปิดเพลง + เริ่มเกม</button>
+      </section>
+
+      <section id="quiz" class="hidden">
+        <div class="progress"><div id="bar"></div></div>
+        <div id="qnum" class="qnum"></div>
+        <h1 id="question"></h1>
+        <p class="hint">ชี้คำตอบ → จีบเพื่อหยิบ → ย้ายไปช่องด้านล่าง → คลายนิ้วเพื่อวาง</p>
+
+        <div id="answers" class="answers"></div>
+
+        <div id="drop" class="drop">
+          <div><b>⬇️ วางคำตอบที่นี่</b><small>ปล่อยนิ้วเมื่อเคอร์เซอร์อยู่ในช่องนี้</small></div>
+        </div>
+
+        <div id="msg" class="msg"></div>
+
+        <div class="actions">
+          <button id="nextBtn" class="next handbutton" type="button" data-hand-click="1" disabled>
+            ข้อต่อไป ➜
+          </button>
+          <div class="handtip">🤏 หลังตอบ ให้ชี้ปุ่มนี้แล้ว “จีบ” เพื่อกด</div>
+        </div>
+      </section>
+
+      <section id="result" class="screen hidden">
+        <div id="resultIcon" class="icon">🏆</div>
+        <h2>จบแบบทดสอบ</h2>
+        <div id="finalScore" class="scorebig">0/10</div>
+        <p id="resultText"></p>
+        <button id="restartBtn" class="handbutton" data-hand-click="1" type="button">🤏 เล่นอีกครั้งด้วยมือ</button>
+      </section>
+    </main>
+
+    <aside class="side">
+      <div class="side-inner">
+        <video id="video" playsinline muted></video>
+        <div>
+          <h3>สถานะกล้อง</h3>
+          <p id="camInfo">ยังไม่ได้เปิดกล้อง</p>
+          <div id="gesture" class="gesture">✋ รอมือ...</div>
+
+          <div class="musicbox">
+            <b>🎶 กำลังเล่น</b>
+            <span id="trackName">High Beams — True Blue Music / Eclipt</span>
+          </div>
+
+          <h3>วิธีควบคุม</h3>
+          <p>
+            1) ยกมือให้อยู่ในภาพ<br>
+            2) นิ้วชี้ = เคอร์เซอร์<br>
+            3) จีบโป้ง+ชี้ = หยิบ/กดปุ่ม<br>
+            4) คลายนิ้วเหนือช่อง = วางคำตอบ
+          </p>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<audio id="bgm" preload="auto"></audio>
+
+<script>
+(() => {
+  const TRACKS = [
+    {name:"High Beams — True Blue Music / Eclipt", src:"music1.mp3"},
+    {name:"Stay the Same (Small Town) — Bill Douglas, Rod Kim", src:"music2.mp3"}
+  ];
+
+  const qs = [
+    ["ข้อใดคือหน้าที่หลักของระบบปฏิบัติการ (OS)?",
+      ["จัดการทรัพยากรของคอมพิวเตอร์","สร้างเว็บไซต์อัตโนมัติ","ใช้แทน CPU","เพิ่มความเร็วอินเทอร์เน็ตเสมอ"],
+      "จัดการทรัพยากรของคอมพิวเตอร์",
+      "OS จัดการ CPU หน่วยความจำ อุปกรณ์ ไฟล์ และโปรแกรมต่าง ๆ"],
+    ["ข้อใดเป็นระบบปฏิบัติการ?",
+      ["Windows 11","Google Chrome","Microsoft Word","Adobe Photoshop"],
+      "Windows 11","Windows 11 เป็น OS ส่วนตัวเลือกอื่นเป็นโปรแกรมประยุกต์"],
+    ["Kernel มีหน้าที่สำคัญอย่างไร?",
+      ["ควบคุมการทำงานระดับแกนกลางของระบบ","ตกแต่ง Desktop","สร้างเอกสาร","ตรวจคำสะกด"],
+      "ควบคุมการทำงานระดับแกนกลางของระบบ","Kernel เป็นแกนกลางที่จัดการทรัพยากรและเชื่อมซอฟต์แวร์กับฮาร์ดแวร์"],
+    ["ระบบปฏิบัติการของ Apple สำหรับเครื่อง Mac คืออะไร?",
+      ["macOS","Android","Ubuntu","Windows Server"],"macOS","macOS คือระบบปฏิบัติการของ Apple สำหรับคอมพิวเตอร์ Mac"],
+    ["ระบบปฏิบัติการใดใช้ Linux kernel และนิยมบนสมาร์ตโฟน?",
+      ["Android","MS-DOS","FreeDOS","macOS"],"Android","Android ใช้ Linux kernel และนิยมบนสมาร์ตโฟน"],
+    ["File System มีหน้าที่เกี่ยวข้องกับอะไร?",
+      ["จัดระเบียบและจัดเก็บไฟล์","เพิ่มความละเอียดหน้าจอ","ควบคุมลำโพงอย่างเดียว","แปลภาษาโปรแกรม"],
+      "จัดระเบียบและจัดเก็บไฟล์","File System กำหนดวิธีจัดเก็บ ค้นหา และจัดการไฟล์กับโฟลเดอร์"],
+    ["Multitasking หมายถึงอะไร?",
+      ["จัดการหลายโปรแกรมในช่วงเวลาเดียวกัน","เปิดคอมพิวเตอร์หลายเครื่อง","มีผู้ใช้เพียงคนเดียว","ติดตั้ง OS หลายครั้ง"],
+      "จัดการหลายโปรแกรมในช่วงเวลาเดียวกัน","OS จัดสรรเวลา CPU ให้หลายงานทำงานสลับกันอย่างรวดเร็ว"],
+    ["Virtual Memory คืออะไร?",
+      ["ใช้พื้นที่จัดเก็บช่วยเสริม RAM","RAM ที่มองไม่เห็น","หน่วยความจำการ์ดจอเท่านั้น","พื้นที่เก็บไฟล์ Cloud"],
+      "ใช้พื้นที่จัดเก็บช่วยเสริม RAM","Virtual Memory ใช้พื้นที่ SSD/HDD ช่วยเมื่อ RAM ไม่พอ"],
+    ["CLI ย่อมาจากอะไร?",
+      ["Command-Line Interface","Computer Link Internet","Central Login Input","Core Language Integration"],
+      "Command-Line Interface","CLI คือส่วนติดต่อแบบพิมพ์คำสั่ง เช่น Terminal หรือ Command Prompt"],
+    ["ข้อใดเป็นระบบปฏิบัติการโอเพนซอร์สยอดนิยม?",
+      ["Ubuntu Linux","Windows 11","iOS","macOS"],"Ubuntu Linux","Ubuntu เป็น Linux distribution แบบโอเพนซอร์ส"]
+  ];
+
+  const $=id=>document.getElementById(id);
+  const board=$("board"),video=$("video"),cursor=$("cursor"),floating=$("floating");
+  const startScreen=$("startScreen"),quiz=$("quiz"),result=$("result");
+  const startBtn=$("startBtn"),restartBtn=$("restartBtn"),nextBtn=$("nextBtn");
+  const answers=$("answers"),drop=$("drop"),msg=$("msg"),question=$("question");
+  const qnum=$("qnum"),scoreEl=$("score"),count=$("count"),bar=$("bar");
+  const camInfo=$("camInfo"),gesture=$("gesture"),soundBtn=$("soundBtn");
+  const musicBtn=$("musicBtn"),trackBtn=$("trackBtn"),bgm=$("bgm"),trackName=$("trackName");
+
+  let hands,camera;
+  let idx=0,score=0,answered=false,soundOn=true,musicOn=true,trackIndex=0;
+  let pinching=false,prevPinching=false,grabbed=null,hovered=null;
+  let audioCtx=null,smoothX=.5,smoothY=.5;
+  let lastHandClickAt=0;
+
+  function shuffle(a){
+    a=[...a];
+    for(let i=a.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [a[i],a[j]]=[a[j],a[i]];
+    }
+    return a;
+  }
+
+  function ensureAudio(){
+    if(!audioCtx){
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if(AC) audioCtx=new AC();
+    }
+    if(audioCtx?.state==="suspended") audioCtx.resume();
+  }
+  function tone(f,d,type="sine",v=.06,delay=0){
+    if(!soundOn)return;
+    ensureAudio();if(!audioCtx)return;
+    const t=audioCtx.currentTime+delay,o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type=type;o.frequency.value=f;g.gain.setValueAtTime(.001,t);
+    g.gain.exponentialRampToValueAtTime(v,t+.015);
+    g.gain.exponentialRampToValueAtTime(.001,t+d);
+    o.connect(g);g.connect(audioCtx.destination);o.start(t);o.stop(t+d+.03);
+  }
+  function goodSound(){[523,659,784].forEach((f,i)=>tone(f,.18,"sine",.07,i*.09))}
+  function badSound(){tone(230,.18,"sawtooth",.045);tone(160,.23,"sawtooth",.045,.12)}
+  function finishSound(){[523,659,784,1046].forEach((f,i)=>tone(f,.2,"triangle",.06,i*.1))}
+  function clickSound(){tone(460,.07,"square",.025)}
+
+  function loadTrack(i,play=true){
+    trackIndex=(i+TRACKS.length)%TRACKS.length;
+    bgm.src=TRACKS[trackIndex].src;
+    bgm.volume=.18;
+    trackName.textContent=TRACKS[trackIndex].name;
+    if(play && musicOn) bgm.play().catch(()=>{});
+  }
+  bgm.addEventListener("ended",()=>loadTrack(trackIndex+1,true));
+
+  async function initCamera(){
+    ensureAudio();
+    loadTrack(0,true);
+    camInfo.textContent="กำลังเปิดกล้อง...";
+    try{
+      hands=new Hands({locateFile:file=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+      hands.setOptions({
+        maxNumHands:1,modelComplexity:1,minDetectionConfidence:.65,minTrackingConfidence:.65
+      });
+      hands.onResults(onResults);
+      camera=new Camera(video,{
+        onFrame:async()=>{await hands.send({image:video})},
+        width:640,height:480
+      });
+      await camera.start();
+      camInfo.textContent="กล้องพร้อมใช้งาน";
+      startGame();
+    }catch(e){
+      camInfo.textContent="เปิดกล้องไม่ได้: "+(e?.message||"กรุณาอนุญาตสิทธิ์กล้อง");
+    }
+  }
+
+  function onResults(res){
+    if(!res.multiHandLandmarks||!res.multiHandLandmarks.length){
+      cursor.classList.add("hidden");
+      gesture.textContent="✋ รอมือ...";
+      setHovered(null);
+      prevPinching=false;
+      return;
+    }
+
+    const lm=res.multiHandLandmarks[0];
+    const indexTip=lm[8],thumbTip=lm[4],indexBase=lm[5];
+    const x=1-indexTip.x,y=indexTip.y;
+
+    smoothX=smoothX*.64+x*.36;
+    smoothY=smoothY*.64+y*.36;
+
+    const br=board.getBoundingClientRect();
+    const cx=smoothX*br.width,cy=smoothY*br.height;
+    cursor.style.left=cx+"px";cursor.style.top=cy+"px";cursor.classList.remove("hidden");
+
+    const d=Math.hypot(thumbTip.x-indexTip.x,thumbTip.y-indexTip.y);
+    const palmScale=Math.max(.04,Math.hypot(indexBase.x-lm[0].x,indexBase.y-lm[0].y));
+    pinching=(d/palmScale)<.38;
+
+    cursor.classList.toggle("pinching",pinching);
+    gesture.textContent=pinching?"🤏 จีบอยู่ — หยิบ/กด":"☝️ ชี้มือเพื่อเลือก";
+
+    const pageX=br.left+cx,pageY=br.top+cy;
+    const elem=document.elementFromPoint(pageX,pageY);
+    const answerEl=elem?.closest?.(".answer");
+    const dropEl=elem?.closest?.("#drop");
+    const handButton=elem?.closest?.("[data-hand-click='1']");
+
+    let hoverTarget=null;
+    if(handButton && !handButton.disabled) hoverTarget=handButton;
+    else if(answerEl && !answered) hoverTarget=answerEl;
+    else if(dropEl) hoverTarget=drop;
+    setHovered(hoverTarget);
+
+    // Pinch-to-click buttons, including Next and Play Again.
+    if(pinching && !prevPinching && !grabbed && handButton && !handButton.disabled){
+      const now=performance.now();
+      if(now-lastHandClickAt>450){
+        lastHandClickAt=now;
+        clickSound();
+        handButton.click();
+      }
+    }
+
+    // Pinch-to-grab an answer.
+    if(pinching && !prevPinching && !answered && answerEl){
+      grabbed=answerEl;
+      grabbed.classList.add("grabbed");
+      floating.textContent=grabbed.dataset.value;
+      floating.classList.remove("hidden");
+    }
+
+    if(grabbed){
+      floating.style.left=cx+"px";
+      floating.style.top=cy+"px";
+    }
+
+    // Release over drop zone to submit.
+    if(!pinching && prevPinching && grabbed){
+      if(dropEl && !answered) submit(grabbed.dataset.value);
+      grabbed.classList.remove("grabbed");
+      grabbed=null;
+      floating.classList.add("hidden");
+    }
+
+    prevPinching=pinching;
+  }
+
+  function setHovered(el){
+    if(hovered&&hovered!==el) hovered.classList.remove("hovered");
+    hovered=el;
+    if(hovered) hovered.classList.add("hovered");
+  }
+
+  function startGame(){
+    idx=0;score=0;answered=false;
+    scoreEl.textContent=0;count.textContent=1;
+    startScreen.classList.add("hidden");result.classList.add("hidden");quiz.classList.remove("hidden");
+    render();
+  }
+
+  function render(){
+    answered=false;nextBtn.disabled=true;nextBtn.classList.remove("ready");
+    msg.textContent="";msg.className="msg";drop.className="drop";
+    drop.innerHTML="<div><b>⬇️ วางคำตอบที่นี่</b><small>ปล่อยนิ้วเมื่อเคอร์เซอร์อยู่ในช่องนี้</small></div>";
+    answers.innerHTML="";
+    const [q,opts]=qs[idx];
+    question.textContent=q;qnum.textContent=`คำถามที่ ${idx+1} จาก ${qs.length}`;
+    count.textContent=idx+1;bar.style.width=(idx/qs.length*100)+"%";
+
+    shuffle(opts).forEach(t=>{
+      const el=document.createElement("div");
+      el.className="answer";el.textContent=t;el.dataset.value=t;
+      answers.appendChild(el);
+    });
+  }
+
+  function submit(value){
+    if(answered)return;
+    answered=true;
+    const correct=qs[idx][2],explain=qs[idx][3];
+    [...answers.children].forEach(x=>x.classList.add("disabled"));
+    setHovered(null);
+    drop.innerHTML=`<div><b>${value}</b><small>คำตอบที่วาง</small></div>`;
+
+    if(value===correct){
+      score++;scoreEl.textContent=score;drop.classList.add("good");
+      msg.className="msg good";msg.textContent="✅ ถูกต้อง! "+explain;goodSound();
+    }else{
+      drop.classList.add("bad");msg.className="msg bad";
+      msg.textContent=`❌ ยังไม่ถูก — คำตอบที่ถูกคือ “${correct}”`;badSound();
+    }
+
+    nextBtn.disabled=false;
+    nextBtn.classList.add("ready");
+    nextBtn.textContent=idx===qs.length-1 ? "ดูผลคะแนน 🏆" : "ข้อต่อไป ➜";
+  }
+
+  function next(){
+    if(!answered)return;
+    if(idx<qs.length-1){idx++;render()}else finish();
+  }
+
+  function finish(){
+    quiz.classList.add("hidden");result.classList.remove("hidden");count.textContent=10;
+    $("finalScore").textContent=`${score}/10`;
+    if(score>=9){$("resultIcon").textContent="🏆";$("resultText").textContent="ยอดเยี่ยมมาก! ความรู้เรื่อง OS แน่นมาก"}
+    else if(score>=7){$("resultIcon").textContent="🎉";$("resultText").textContent="ทำได้ดีมาก! ลองเล่นอีกครั้งเพื่อเก็บข้อที่พลาด"}
+    else if(score>=5){$("resultIcon").textContent="💪";$("resultText").textContent="ทำได้เกินครึ่งแล้ว ลองทบทวน Kernel, File System และ Memory"}
+    else{$("resultIcon").textContent="📚";$("resultText").textContent="ลองเล่นใหม่พร้อมอ่านคำอธิบายหลังตอบแต่ละข้อ"}
+    finishSound();
+  }
+
+  startBtn.addEventListener("click",initCamera);
+  restartBtn.addEventListener("click",startGame);
+  nextBtn.addEventListener("click",next);
+
+  musicBtn.addEventListener("click",()=>{
+    musicOn=!musicOn;
+    if(musicOn) bgm.play().catch(()=>{}); else bgm.pause();
+    musicBtn.textContent=musicOn?"🎵 เพลง: เปิด":"🎵 เพลง: ปิด";
+  });
+
+  trackBtn.addEventListener("click",()=>loadTrack(trackIndex+1,true));
+
+  soundBtn.addEventListener("click",()=>{
+    soundOn=!soundOn;ensureAudio();
+    soundBtn.textContent=soundOn?"🔊 SFX: เปิด":"🔇 SFX: ปิด";
+  });
+
+  // Mouse fallback for development/testing.
+  answers.addEventListener("click",e=>{
+    const el=e.target.closest(".answer");
+    if(el&&!answered) submit(el.dataset.value);
+  });
+})();
+</script>
+</body>
+</html>
